@@ -41,7 +41,7 @@ func (hook *writeHook) Levels() []logrus.Level {
 	return hook.lev
 }
 
-func init() {
+func Init() {
 	logger := logrus.New()
 	// настройка строки вывода журналирования
 	logger.ReportCaller = false

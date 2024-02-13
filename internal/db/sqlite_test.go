@@ -46,26 +46,28 @@ func TestAddGetDelete(t *testing.T) {
 
 	// add
 	id, err := store.Add(parcel)
+	parcel.Number = id
 	require.NoError(t, err)
-	require.NotEqual(t, id, -1)
+	// Проверка id > 0
+	require.Greater(t, id, 0)
 
 	// get
 	parcelActual, err := store.Get(id)
+	// Добавил проверку на не nil (исправлено)
+	require.NotNil(t, parcelActual)
 	require.NoError(t, err)
-	require.Equal(t, parcel.Address, parcelActual.Address)
-	require.Equal(t, parcel.Client, parcelActual.Client)
-	require.Equal(t, parcel.CreatedAt, parcelActual.CreatedAt)
-	require.Equal(t, parcel.Status, parcelActual.Status)
+	// Исправлена проверка равенства структур (исправлено)
+	require.Equal(t, parcel, *parcelActual)
 
 	// delete
 	err = store.Delete(id)
 	require.NoError(t, err)
 
 	// get удаленной посылки
-	var parcelDeletedExpected *internal.Parcel // nil значение
 	parcelDeletedActual, err := store.Get(id)
-	require.Equal(t, parcelDeletedExpected, parcelDeletedActual)
-	require.NoError(t, err)
+	// Переделал проверку (исправлено)
+	require.Nil(t, parcelDeletedActual)
+	require.ErrorIs(t, err, internal.ErrEmptyData)
 }
 
 // TestSetAddress проверяет обновление адреса
@@ -82,7 +84,8 @@ func TestSetAddress(t *testing.T) {
 	// add
 	id, err := store.Add(parcel)
 	require.NoError(t, err)
-	require.NotEqual(t, id, -1)
+	// Проверка id > 0
+	require.Greater(t, id, 0)
 
 	// set address
 	newAddress := "new test address"
@@ -91,6 +94,8 @@ func TestSetAddress(t *testing.T) {
 
 	// check
 	parcelActual, err := store.Get(id)
+	// Переделал проверку (исправлено)
+	require.NotNil(t, parcelActual)
 	require.NoError(t, err)
 	require.Equal(t, newAddress, parcelActual.Address)
 }
@@ -109,7 +114,8 @@ func TestSetStatus(t *testing.T) {
 	// add
 	id, err := store.Add(parcel)
 	require.NoError(t, err)
-	require.NotEqual(t, id, -1)
+	// Проверка id > 0
+	require.Greater(t, id, 0)
 
 	// set status
 	newStatus := internal.ParcelStatusSent
@@ -118,6 +124,8 @@ func TestSetStatus(t *testing.T) {
 
 	// check
 	parcelActual, err := store.Get(id)
+	// Переделал проверку (исправлено)
+	require.NotNil(t, parcelActual)
 	require.NoError(t, err)
 	require.Equal(t, newStatus, parcelActual.Status)
 }
@@ -138,8 +146,6 @@ func TestGetByClient(t *testing.T) {
 		getTestParcel(),
 		getTestParcel(),
 	}
-	// мапа [id посылки] посылка
-	parcelMap := map[int]internal.Parcel{}
 
 	// задаём всем посылкам один и тот же идентификатор клиента
 	client := randRange.Intn(10_000_000) // случайное число из диапазон [0,9999999)
@@ -151,31 +157,14 @@ func TestGetByClient(t *testing.T) {
 	for i := 0; i < len(parcels); i++ {
 		id, err := store.Add(parcels[i])
 		require.NoError(t, err)
-		require.NotEqual(t, id, -1)
-
+		require.Greater(t, id, 0)
 		// обновляем идентификатор добавленной у посылки
 		parcels[i].Number = id
-
-		// сохраняем добавленную посылку в структуру map, чтобы её можно было легко достать по идентификатору посылки
-		parcelMap[id] = parcels[i]
 	}
-
 	// get by client
 	storedParcels, err := store.GetByClient(client)
+	require.NotNil(t, storedParcels)
 	require.NoError(t, err)
-	// проверка количества посылок
-	require.Equal(t, len(parcels), len(storedParcels))
-
-	// check
-	for _, parcel := range storedParcels {
-		// проверка наличия в мапе
-		if _, ok := parcelMap[parcel.Number]; !ok {
-			require.True(t, ok)
-		}
-		require.Equal(t, parcelMap[parcel.Number].Address, parcel.Address)
-		require.Equal(t, parcelMap[parcel.Number].Client, parcel.Client)
-		require.Equal(t, parcelMap[parcel.Number].CreatedAt, parcel.CreatedAt)
-		require.Equal(t, parcelMap[parcel.Number].Number, parcel.Number)
-		require.Equal(t, parcelMap[parcel.Number].Status, parcel.Status)
-	}
+	// Изменена проверка равенства слайсов
+	require.Equal(t, storedParcels, parcels)
 }

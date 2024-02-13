@@ -20,7 +20,9 @@ const (
 
 func main() {
 	// инициализация логера
+	logging.Init()
 	logger := logging.New()
+
 	sqliteDB, err := sql.Open("sqlite", pathSqliteDB) // Подключение к SQLite
 	if err != nil {
 		logger.Fatal(ErrOpenDB)
@@ -38,54 +40,54 @@ func main() {
 	p, err := service.Register(client, address)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 	// изменение адреса
 	newAddress := "Саратов, д. Верхние Зори, ул. Козлова, д. 25"
 	err = service.ChangeAddress(p.Number, newAddress)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 
 	// изменение статуса
 	err = service.NextStatus(p.Number)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 
 	// вывод посылок клиента
 	err = service.PrintClientParcels(client)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 	// попытка удаления отправленной посылки
 	err = service.Delete(p.Number)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 	// вывод посылок клиента
 	// предыдущая посылка не должна удалиться, т.к. её статус НЕ «зарегистрирована»
 	err = service.PrintClientParcels(client)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 
 	// регистрация новой посылки
 	p, err = service.Register(client, address)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 	// удаление новой посылки
 	err = service.Delete(p.Number)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 
 	// вывод посылок клиента
@@ -93,6 +95,6 @@ func main() {
 	err = service.PrintClientParcels(client)
 	if err != nil {
 		fmt.Println(err)
-		return
+		//return
 	}
 }

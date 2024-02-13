@@ -1,5 +1,6 @@
 package internal
 
+// Интерфейс хранилища.
 type Storage interface {
 	Add(Parcel) (int, error)
 	Get(int) (*Parcel, error)

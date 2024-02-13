@@ -1,10 +1,27 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Yandex-Practicum/go-db-sql-final/pkg/logging"
+)
+
+// Глобальная переменная интерфейсного типа для того, чтобы проверить реализует ли структура ParcelService интерфейс Service.
+// (Исправление)
+var _ Service = &ParcelService{}
+
+// Статусы заказа.
+const (
+	ParcelStatusRegistered = "registered"
+	ParcelStatusSent       = "sent"
+	ParcelStatusDelivered  = "delivered"
+)
+
+var (
+	ErrEmptyData          = errors.New("отсутствуют данные в БД")
+	ErrUnacceptableStatus = errors.New(`можно удалять посылки только со статусом "registered"`)
 )
 
 // Интрефейс обертка сервиса.
@@ -15,15 +32,6 @@ type Service interface {
 	ChangeAddress(int, string) error
 	Delete(int) error
 }
-
-var _ Service = &ParcelService{}
-
-// Статусы заказа.
-const (
-	ParcelStatusRegistered = "registered"
-	ParcelStatusSent       = "sent"
-	ParcelStatusDelivered  = "delivered"
-)
 
 // Структура сервиса заказов.
 type ParcelService struct {
@@ -59,7 +67,7 @@ func (s ParcelService) Register(client int, address string) (Parcel, error) {
 
 	fmt.Printf("Новая посылка № %d на адрес %s от клиента с идентификатором %d зарегистрирована %s\n",
 		parcel.Number, parcel.Address, parcel.Client, parcel.CreatedAt)
-	s.logger.Infof(`Добавлен заказ № %d с клиентом %d по адресу "%s", статус: %s`, id, client, address, parcel.Status)
+	s.logger.Infof(`Добавлен заказ № %d с клиентом %d по адресу '%s', статус: %s`, id, client, address, parcel.Status)
 	return parcel, nil
 }
 
@@ -69,6 +77,10 @@ func (s ParcelService) PrintClientParcels(client int) error {
 	parcels, err := s.store.GetByClient(client)
 	if err != nil {
 		s.logger.Errorf("ошибка поиска посылки с идентификатором клиента № %d : %s", client, err.Error())
+		return err
+	}
+	if errors.Is(err, ErrEmptyData) {
+		s.logger.Errorf("%s посылки с идентификатором клиента № %d", err.Error(), client)
 		return err
 	}
 
@@ -90,9 +102,9 @@ func (s ParcelService) NextStatus(number int) error {
 		return err
 	}
 	// проверка на существование заказа в БД
-	if parcel == nil {
-		s.logger.Infof("Посылка с №: %d отсутствует в БД", number)
-		return nil
+	if errors.Is(err, ErrEmptyData) {
+		s.logger.Errorf("%s: посылки с №: %d отсутствует в БД", err.Error(), number)
+		return err
 	}
 
 	var nextStatus string
@@ -106,40 +118,36 @@ func (s ParcelService) NextStatus(number int) error {
 	}
 
 	fmt.Printf("У посылки № %d новый статус: %s\n", number, nextStatus)
-	s.logger.Infof(`Статус заказа № %d изменен на "%s"`, number, nextStatus)
+	s.logger.Infof(`Статус заказа № %d изменен на '%s'`, number, nextStatus)
 	return s.store.SetStatus(number, nextStatus)
 }
 
 // ChangeAddress изменяет адрес у заказа number на новый.
 func (s ParcelService) ChangeAddress(number int, address string) error {
-	parcel, err := s.store.Get(number)
+	_, err := s.store.Get(number)
 	if err != nil {
 		s.logger.Errorf("ошибка получения посылки № %d: %s", number, err.Error())
 		return err
 	}
 	// проверка на существование заказа в БД
-	if parcel == nil {
-		s.logger.Infof("Посылка с №: %d отсутствует в БД", number)
-		return nil
+	if errors.Is(err, ErrEmptyData) {
+		s.logger.Errorf("%s: посылки с №: %d отсутствует в БД", err.Error(), number)
+		return err
 	}
-	s.logger.Infof(`Адрес заказа № %d изменен на "%s"`, number, address)
+	s.logger.Infof(`Адрес заказа № %d изменен на '%s'`, number, address)
 	return s.store.SetAddress(number, address)
 }
 
 // Delete удаляет заказ с номером number.
 func (s ParcelService) Delete(number int) error {
+	// проверка на существование заказа в БД
 	parcel, err := s.store.Get(number)
 	if err != nil {
 		s.logger.Errorf("ошибка получения посылки № %d: %s", number, err.Error())
 		return err
 	}
-	// проверка на существование заказа в БД
-	if parcel == nil {
-		s.logger.Infof("Посылка с №: %d отсутствует в БД", number)
-		return nil
-	}
-	if parcel.Status != ParcelStatusRegistered {
-		s.logger.Infof(`Заказ № %d имеет статус "%s" не может быть удален`, number, parcel.Status)
+	if errors.Is(err, ErrUnacceptableStatus) {
+		s.logger.Infof(`Посылка № %d имеет статус "%s" не может быть удален`, number, parcel.Status)
 		return nil
 	}
 	s.logger.Infof("Заказ № %d удален из БД", number)

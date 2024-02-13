@@ -2,13 +2,14 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 
 	"github.com/Yandex-Practicum/go-db-sql-final/internal"
 
 	_ "modernc.org/sqlite"
 )
 
+// Глобальная переменная интерфейсного типа для того, чтобы проверить реализует ли структура ParcelStore интерфейс Storage.
+// (Исправление)
 var _ internal.Storage = &ParcelStore{}
 
 // Структура ДБ.
@@ -44,19 +45,22 @@ func (s ParcelStore) Add(p internal.Parcel) (int, error) {
 
 // Get возвращает структуру заказа, если его нет в БД возвращает nil.
 func (s ParcelStore) Get(number int) (*internal.Parcel, error) {
-	q := `SELECT client, status, address, created_at FROM parcel WHERE number=:numberVal`
+	q := `SELECT number, client, status, address, created_at FROM parcel WHERE number=:numberVal`
 	row := s.db.QueryRow(q, sql.Named("numberVal", number))
 
-	p := internal.Parcel{}
+	// Инициализировал указатель на структуру (исправление)
+	p := new(internal.Parcel)
 
-	err := row.Scan(&p.Client, &p.Status, &p.Address, &p.CreatedAt)
+	// Добавил номер посылки в структуру (исправление)
+	err := row.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		// Добавил кастомную ошибку отсутствия данных в БД, логирование в слое сервиса (исправление)
+		return nil, internal.ErrEmptyData
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &p, nil
+	return p, nil
 }
 
 func (s ParcelStore) GetByClient(client int) ([]internal.Parcel, error) {
@@ -72,9 +76,6 @@ func (s ParcelStore) GetByClient(client int) ([]internal.Parcel, error) {
 	for rows.Next() {
 		p := internal.Parcel{Client: client}
 		err = rows.Scan(&p.Number, &p.Status, &p.Address, &p.CreatedAt)
-		if err == sql.ErrNoRows {
-			return []internal.Parcel{}, nil
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -98,15 +99,8 @@ func (s ParcelStore) SetStatus(number int, status string) error {
 }
 
 func (s ParcelStore) SetAddress(number int, address string) error {
-	parcel, err := s.Get(number)
-	if err != nil {
-		return err
-	}
-	if parcel.Status != internal.ParcelStatusRegistered {
-		return fmt.Errorf("нельзя изменить адрес для статуса заказа " + parcel.Status)
-	}
 	q := `UPDATE parcel SET address=:addressVal WHERE number=:numberVal`
-	_, err = s.db.Exec(q,
+	_, err := s.db.Exec(q,
 		sql.Named("addressVal", address),
 		sql.Named("numberVal", number))
 	if err != nil {
@@ -116,8 +110,17 @@ func (s ParcelStore) SetAddress(number int, address string) error {
 }
 
 func (s ParcelStore) Delete(number int) error {
+	parcel, err := s.Get(number)
+	if err != nil {
+		return err
+	}
+	// Добавил проверку на статус посылки (исправлено)
+	// Проверка на кастомную ошибку в методе Delete структуры ParcelService
+	if parcel.Status != internal.ParcelStatusRegistered {
+		return internal.ErrUnacceptableStatus
+	}
 	q := `DELETE FROM parcel WHERE number=:numberVal`
-	_, err := s.db.Exec(q,
+	_, err = s.db.Exec(q,
 		sql.Named("numberVal", number))
 	if err != nil {
 		return err
