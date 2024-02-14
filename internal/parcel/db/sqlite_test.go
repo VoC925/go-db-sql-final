@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Yandex-Practicum/go-db-sql-final/internal"
+	"github.com/Yandex-Practicum/go-db-sql-final/internal/parcel"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	_ "modernc.org/sqlite"
@@ -24,10 +25,10 @@ var (
 )
 
 // getTestParcel возвращает тестовую посылку
-func getTestParcel() internal.Parcel {
-	return internal.Parcel{
+func getTestParcel() *parcel.Parcel {
+	return &parcel.Parcel{
 		Client:    1000,
-		Status:    internal.ParcelStatusRegistered,
+		Status:    parcel.ParcelStatusRegistered,
 		Address:   "test",
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -42,11 +43,11 @@ func TestAddGetDelete(t *testing.T) {
 	defer db.Close()
 
 	store := NewParcelStore(db)
-	parcel := getTestParcel()
+	parcelData := getTestParcel()
 
 	// add
-	id, err := store.Add(parcel)
-	parcel.Number = id
+	id, err := store.Add(parcelData)
+	parcelData.Number = id
 	require.NoError(t, err)
 	// Проверка id > 0
 	require.Greater(t, id, 0)
@@ -57,7 +58,7 @@ func TestAddGetDelete(t *testing.T) {
 	require.NotNil(t, parcelActual)
 	require.NoError(t, err)
 	// Исправлена проверка равенства структур (исправлено)
-	require.Equal(t, parcel, *parcelActual)
+	require.Equal(t, parcelData, parcelActual)
 
 	// delete
 	err = store.Delete(id)
@@ -67,7 +68,7 @@ func TestAddGetDelete(t *testing.T) {
 	parcelDeletedActual, err := store.Get(id)
 	// Переделал проверку (исправлено)
 	require.Nil(t, parcelDeletedActual)
-	require.ErrorIs(t, err, internal.ErrEmptyData)
+	require.ErrorIs(t, err, parcel.ErrEmptyData)
 }
 
 // TestSetAddress проверяет обновление адреса
@@ -109,16 +110,16 @@ func TestSetStatus(t *testing.T) {
 	defer db.Close()
 
 	store := NewParcelStore(db)
-	parcel := getTestParcel()
+	parcelData := getTestParcel()
 
 	// add
-	id, err := store.Add(parcel)
+	id, err := store.Add(parcelData)
 	require.NoError(t, err)
 	// Проверка id > 0
 	require.Greater(t, id, 0)
 
 	// set status
-	newStatus := internal.ParcelStatusSent
+	newStatus := parcel.ParcelStatusSent
 	err = store.SetStatus(id, newStatus)
 	require.NoError(t, err)
 
@@ -141,7 +142,7 @@ func TestGetByClient(t *testing.T) {
 	store := NewParcelStore(db)
 
 	// слайс посылок
-	parcels := []internal.Parcel{
+	parcels := []*parcel.Parcel{
 		getTestParcel(),
 		getTestParcel(),
 		getTestParcel(),
@@ -166,5 +167,5 @@ func TestGetByClient(t *testing.T) {
 	require.NotNil(t, storedParcels)
 	require.NoError(t, err)
 	// Изменена проверка равенства слайсов
-	require.Equal(t, storedParcels, parcels)
+	assert.ElementsMatch(t, storedParcels, parcels)
 }

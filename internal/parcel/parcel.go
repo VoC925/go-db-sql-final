@@ -1,4 +1,4 @@
-package internal
+package parcel
 
 // Модель заказа
 type Parcel struct {

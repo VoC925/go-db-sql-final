@@ -1,4 +1,4 @@
-package internal
+package parcel
 
 import (
 	"errors"
@@ -20,8 +20,8 @@ const (
 )
 
 var (
-	ErrEmptyData          = errors.New("отсутствуют данные в БД")
-	ErrUnacceptableStatus = errors.New(`можно удалять посылки только со статусом "registered"`)
+	ErrEmptyData    = errors.New("отсутствуют данные в БД")
+	ErrNilStructure = errors.New("структура имеет значение nil")
 )
 
 // Интрефейс обертка сервиса.
@@ -57,7 +57,7 @@ func (s ParcelService) Register(client int, address string) (Parcel, error) {
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	// добавление в ДБ нового заказа
-	id, err := s.store.Add(parcel)
+	id, err := s.store.Add(&parcel)
 	if err != nil {
 		s.logger.Error("ошибка добавления посылки: " + err.Error())
 		return parcel, err
@@ -75,6 +75,10 @@ func (s ParcelService) Register(client int, address string) (Parcel, error) {
 func (s ParcelService) PrintClientParcels(client int) error {
 	// извлечение из ДБ всех заказов с идентификатором client
 	parcels, err := s.store.GetByClient(client)
+	if parcels == nil {
+		s.logger.Errorf("ошибка получения посылки у клиента № %d: %s", client, ErrNilStructure)
+		return err
+	}
 	if err != nil {
 		s.logger.Errorf("ошибка поиска посылки с идентификатором клиента № %d : %s", client, err.Error())
 		return err
@@ -124,7 +128,11 @@ func (s ParcelService) NextStatus(number int) error {
 
 // ChangeAddress изменяет адрес у заказа number на новый.
 func (s ParcelService) ChangeAddress(number int, address string) error {
-	_, err := s.store.Get(number)
+	parcel, err := s.store.Get(number)
+	if parcel == nil {
+		s.logger.Errorf("ошибка получения посылки № %d: %s", number, ErrNilStructure)
+		return ErrNilStructure
+	}
 	if err != nil {
 		s.logger.Errorf("ошибка получения посылки № %d: %s", number, err.Error())
 		return err
@@ -134,6 +142,10 @@ func (s ParcelService) ChangeAddress(number int, address string) error {
 		s.logger.Errorf("%s: посылки с №: %d отсутствует в БД", err.Error(), number)
 		return err
 	}
+	if parcel.Status != ParcelStatusRegistered {
+		s.logger.Errorf(`Посылка № %d имеет статус '%s' адрес не может быть изменен`, number, parcel.Status)
+		return nil
+	}
 	s.logger.Infof(`Адрес заказа № %d изменен на '%s'`, number, address)
 	return s.store.SetAddress(number, address)
 }
@@ -142,12 +154,16 @@ func (s ParcelService) ChangeAddress(number int, address string) error {
 func (s ParcelService) Delete(number int) error {
 	// проверка на существование заказа в БД
 	parcel, err := s.store.Get(number)
+	if parcel == nil {
+		s.logger.Errorf("ошибка получения посылки № %d: %s", number, ErrNilStructure)
+		return ErrNilStructure
+	}
 	if err != nil {
 		s.logger.Errorf("ошибка получения посылки № %d: %s", number, err.Error())
 		return err
 	}
-	if errors.Is(err, ErrUnacceptableStatus) {
-		s.logger.Infof(`Посылка № %d имеет статус "%s" не может быть удален`, number, parcel.Status)
+	if parcel.Status != ParcelStatusRegistered {
+		s.logger.Errorf(`Посылка № %d имеет статус '%s' не может быть удалена`, number, parcel.Status)
 		return nil
 	}
 	s.logger.Infof("Заказ № %d удален из БД", number)
